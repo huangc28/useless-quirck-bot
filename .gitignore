@@ -1,0 +1,12 @@
+.env
+.env.local
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Local build outputs
+/interview-chatbot
+/server
+/bin/
+/dist/
