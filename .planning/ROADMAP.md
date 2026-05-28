@@ -23,4 +23,17 @@
 8. Auth-required website responses tell the user/operator that a browser auth session must be prepared.
 9. Demo documentation explains how to run the `請問義美小泡芙多少錢` scenario.
 
-**Plans:** TBD after spec and discussion.
+**Plans:**
+
+**Wave 1**
+- `01-01` — Project foundation, shared contracts, JSON schemas, and config.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- `01-02` — LLM intent router and general-chat responder.
+- `01-03` — SQLite lookup cache and local CLI lookup worker boundary.
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- `01-04` — Telegram webhook, app orchestration, server entrypoint, and README demo guide.
+
+**Cross-cutting constraints:**
+- Runtime must support live-primary demo paths while retaining documented mock fallback modes.
