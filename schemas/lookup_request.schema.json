@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LookupRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["mode", "question", "normalized_question"],
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": ["public_lookup", "browser_lookup"]
+    },
+    "question": {
+      "type": "string"
+    },
+    "normalized_question": {
+      "type": "string"
+    },
+    "cache_hint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lookup_type": { "type": "string" },
+        "target": { "type": "string" },
+        "site": { "type": "string" },
+        "url": { "type": "string" }
+      }
+    },
+    "force_refresh": {
+      "type": "boolean"
+    }
+  }
+}

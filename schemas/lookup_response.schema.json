@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LookupResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["ok", "no_result", "auth_required", "error"]
+    },
+    "answer": {
+      "type": "string"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": { "type": "string" },
+          "url": { "type": "string" },
+          "source": { "type": "string" },
+          "snippet": { "type": "string" },
+          "observed_at": { "type": "string" }
+        }
+      }
+    },
+    "observed_at": {
+      "type": "string"
+    },
+    "error": {
+      "type": "string"
+    }
+  }
+}

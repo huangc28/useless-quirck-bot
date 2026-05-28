@@ -10,3 +10,4 @@ data/
 /server
 /bin/
 /dist/
+.gocache/
