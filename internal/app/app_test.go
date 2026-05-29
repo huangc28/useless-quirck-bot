@@ -126,6 +126,21 @@ func TestHandleMessageCachedAuthRequired(t *testing.T) {
 	}
 }
 
+func TestHandleMessageStaleAuthRequiredIfWorkerError(t *testing.T) {
+	app := testApp()
+	app.Router = fakeRouter{result: browserResult()}
+	app.Cache = &fakeCache{entry: cache.Entry{State: cache.StateStale, Response: contracts.LookupResponse{Status: contracts.StatusAuthRequired}}}
+	app.Worker = &fakeWorker{err: errors.New("worker_error")}
+
+	reply, err := app.HandleMessage(context.Background(), "請問 momo 義美小泡芙多少錢")
+	if err != nil {
+		t.Fatalf("HandleMessage returned error: %v", err)
+	}
+	if !strings.Contains(reply, "browser profile") {
+		t.Fatalf("reply = %q", reply)
+	}
+}
+
 func TestHandleMessageStaleIfWorkerError(t *testing.T) {
 	stale := "stale"
 	_ = stale

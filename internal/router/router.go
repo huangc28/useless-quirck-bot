@@ -62,6 +62,7 @@ func ValidateResult(result contracts.RouterResult, threshold float64) (contracts
 			Message: "我不太確定你想查什麼資料，可以再補充網站或商品名稱嗎？",
 		}
 	}
+	result.NormalizedQuestion = strings.TrimSpace(result.NormalizedQuestion)
 	if result.NormalizedQuestion == "" {
 		return contracts.RouterResult{}, RouteDecision{
 			Kind:    DecisionFallback,
@@ -180,9 +181,6 @@ func (c *LiveClient) Route(ctx context.Context, message string) (contracts.Route
 	result, err := parseRouterResult(data)
 	if err != nil {
 		return contracts.RouterResult{}, err
-	}
-	if result.NormalizedQuestion == "" {
-		result.NormalizedQuestion = NormalizeQuestion(message)
 	}
 	return result, nil
 }

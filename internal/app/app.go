@@ -95,14 +95,14 @@ func (a *App) handleLookup(ctx context.Context, text string, result contracts.Ro
 	}, a.lookupTimeout(result.Mode))
 	if err != nil {
 		if stale.State == cache.StateStale {
-			return formatLookupReply(stale.Response, true, true), nil
+			return staleFallbackReply(stale), nil
 		}
 		return lookupFailureReply(), nil
 	}
 
 	if response.Status == contracts.StatusError {
 		if stale.State == cache.StateStale {
-			return formatLookupReply(stale.Response, true, true), nil
+			return staleFallbackReply(stale), nil
 		}
 		return lookupFailureReply(), nil
 	}
@@ -201,6 +201,13 @@ func formatLookupReply(response contracts.LookupResponse, fromCache bool, stale 
 		b.WriteString(observedAt)
 	}
 	return strings.TrimSpace(b.String())
+}
+
+func staleFallbackReply(entry cache.Entry) string {
+	if entry.Response.Status == contracts.StatusAuthRequired {
+		return authRequiredReply(entry.Response)
+	}
+	return formatLookupReply(entry.Response, true, true)
 }
 
 func authRequiredReply(response contracts.LookupResponse) string {

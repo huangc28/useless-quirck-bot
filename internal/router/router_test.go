@@ -99,6 +99,15 @@ func TestValidateResultRejectsInvalidConfidenceAndMissingQuestion(t *testing.T) 
 	if decision.Kind != DecisionFallback {
 		t.Fatalf("missing question decision = %s", decision.Kind)
 	}
+
+	_, decision = ValidateResult(contracts.RouterResult{
+		Mode:               contracts.ModePublicLookup,
+		Confidence:         0.9,
+		NormalizedQuestion: "   ",
+	}, 0.65)
+	if decision.Kind != DecisionFallback {
+		t.Fatalf("blank question decision = %s", decision.Kind)
+	}
 }
 
 func TestLiveClientParsesRouterJSON(t *testing.T) {
@@ -142,6 +151,25 @@ func TestLiveClientReturnsLowConfidenceForAppClarification(t *testing.T) {
 	}
 	if got.Confidence != 0.2 {
 		t.Fatalf("Confidence = %f", got.Confidence)
+	}
+}
+
+func TestLiveClientDoesNotInventMissingNormalizedQuestion(t *testing.T) {
+	httpClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return jsonResponse(200, `{"mode":"public_lookup","confidence":0.9,"reason":"price lookup"}`), nil
+	})}
+
+	client := NewLiveClient("key", "model", "http://router.test", httpClient, 0.65)
+	got, err := client.Route(context.Background(), "請問義美小泡芙多少錢")
+	if err != nil {
+		t.Fatalf("Route returned error: %v", err)
+	}
+	if got.NormalizedQuestion != "" {
+		t.Fatalf("NormalizedQuestion = %q", got.NormalizedQuestion)
+	}
+	_, decision := ValidateResult(got, 0.65)
+	if decision.Kind != DecisionFallback {
+		t.Fatalf("decision = %s", decision.Kind)
 	}
 }
 
