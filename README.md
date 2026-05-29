@@ -23,6 +23,7 @@ Copy `.env.example` values into your shell or local environment manager.
 ```sh
 SERVER_ADDR=:8080
 TELEGRAM_BOT_TOKEN=
+TELEGRAM_WEBHOOK_SECRET=
 LLM_MODE=mock
 LOOKUP_WORKER_MODE=mock
 LOOKUP_WORKER_CMD=
@@ -49,6 +50,7 @@ POST /telegram/webhook
 ```
 
 The handler parses `message.chat.id` and `message.text`, calls the app orchestrator, then sends `sendMessage` back to the source chat.
+When `TELEGRAM_WEBHOOK_SECRET` is set, requests must include Telegram's `X-Telegram-Bot-Api-Secret-Token` header with the same value.
 
 ## Mock Fallback
 

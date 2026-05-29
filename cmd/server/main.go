@@ -45,7 +45,7 @@ func main() {
 	sender := telegram.NewHTTPSender(cfg.TelegramBotToken, nil)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /telegram/webhook", telegramWebhook(bot, sender))
+	mux.HandleFunc("POST /telegram/webhook", telegramWebhook(bot, sender, cfg.TelegramWebhookSecret))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok\n"))
@@ -72,8 +72,12 @@ func main() {
 	}
 }
 
-func telegramWebhook(bot *app.App, sender telegram.Sender) http.HandlerFunc {
+func telegramWebhook(bot *app.App, sender telegram.Sender, secret string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if secret != "" && r.Header.Get("X-Telegram-Bot-Api-Secret-Token") != secret {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
 		chatID, text, ok, err := telegram.ParseUpdate(r.Body)
 		if err != nil {
 			http.Error(w, "invalid telegram update", http.StatusBadRequest)

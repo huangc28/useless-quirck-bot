@@ -36,7 +36,10 @@ func (c *CLIClient) Lookup(ctx context.Context, request contracts.LookupRequest,
 	if request.Mode == contracts.ModeGeneralChat {
 		return contracts.LookupResponse{}, errors.New("general_chat is not a lookup worker mode")
 	}
-	parts := strings.Fields(c.command)
+	parts, err := splitCommand(c.command)
+	if err != nil {
+		return contracts.LookupResponse{}, err
+	}
 	if len(parts) == 0 {
 		return contracts.LookupResponse{}, errors.New("lookup worker command is empty")
 	}
@@ -70,10 +73,22 @@ func (c *CLIClient) Lookup(ctx context.Context, request contracts.LookupRequest,
 	if err != nil {
 		return contracts.LookupResponse{}, err
 	}
-	if err := contracts.ValidateStatus(response.Status); err != nil {
+	if err := validateLookupResponse(response); err != nil {
 		return contracts.LookupResponse{}, err
 	}
 	return response, nil
+}
+
+func validateLookupResponse(response contracts.LookupResponse) error {
+	if err := contracts.ValidateStatus(response.Status); err != nil {
+		return err
+	}
+	if response.Status == contracts.StatusOK {
+		if strings.TrimSpace(response.Answer) == "" || strings.TrimSpace(response.ObservedAt) == "" || len(response.Evidence) == 0 {
+			return errors.New("ok lookup response requires answer, observed_at, and evidence")
+		}
+	}
+	return nil
 }
 
 func decodeSingleResponse(data []byte) (contracts.LookupResponse, error) {
@@ -87,4 +102,45 @@ func decodeSingleResponse(data []byte) (contracts.LookupResponse, error) {
 		return contracts.LookupResponse{}, errors.New("lookup worker returned more than one JSON value")
 	}
 	return response, nil
+}
+
+func splitCommand(command string) ([]string, error) {
+	var parts []string
+	var current strings.Builder
+	var quote rune
+	escaped := false
+	for _, r := range command {
+		switch {
+		case escaped:
+			current.WriteRune(r)
+			escaped = false
+		case r == '\\':
+			escaped = true
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			} else {
+				current.WriteRune(r)
+			}
+		case r == '\'' || r == '"':
+			quote = r
+		case r == ' ' || r == '\t' || r == '\n':
+			if current.Len() > 0 {
+				parts = append(parts, current.String())
+				current.Reset()
+			}
+		default:
+			current.WriteRune(r)
+		}
+	}
+	if escaped {
+		current.WriteRune('\\')
+	}
+	if quote != 0 {
+		return nil, errors.New("unterminated quote in lookup worker command")
+	}
+	if current.Len() > 0 {
+		parts = append(parts, current.String())
+	}
+	return parts, nil
 }

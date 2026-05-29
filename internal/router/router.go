@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"interview-chatbot/internal/contracts"
 )
@@ -49,14 +50,17 @@ func ValidateResult(result contracts.RouterResult, threshold float64) (contracts
 			Message: "我暫時無法判斷這個請求，請換個方式再問一次。",
 		}
 	}
+	if result.Confidence < 0 || result.Confidence > 1 {
+		return contracts.RouterResult{}, RouteDecision{
+			Kind:    DecisionFallback,
+			Message: "我暫時無法判斷這個請求，請換個方式再問一次。",
+		}
+	}
 	if result.Confidence < threshold {
 		return result, RouteDecision{
 			Kind:    DecisionClarify,
 			Message: "我不太確定你想查什麼資料，可以再補充網站或商品名稱嗎？",
 		}
-	}
-	if result.NormalizedQuestion == "" {
-		result.NormalizedQuestion = NormalizeQuestion(result.Reason)
 	}
 	if result.NormalizedQuestion == "" {
 		return contracts.RouterResult{}, RouteDecision{
@@ -116,7 +120,7 @@ type LiveClient struct {
 
 func NewLiveClient(apiKey, model, endpoint string, httpClient *http.Client, threshold float64) *LiveClient {
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		httpClient = &http.Client{Timeout: 15 * time.Second}
 	}
 	return &LiveClient{
 		apiKey:     apiKey,
@@ -180,11 +184,7 @@ func (c *LiveClient) Route(ctx context.Context, message string) (contracts.Route
 	if result.NormalizedQuestion == "" {
 		result.NormalizedQuestion = NormalizeQuestion(message)
 	}
-	validated, decision := ValidateResult(result, c.threshold)
-	if decision.Kind != DecisionExecutable {
-		return validated, errors.New(decision.Message)
-	}
-	return validated, nil
+	return result, nil
 }
 
 func parseRouterResult(data []byte) (contracts.RouterResult, error) {

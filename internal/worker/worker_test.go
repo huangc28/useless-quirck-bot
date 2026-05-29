@@ -19,7 +19,7 @@ func TestCLIClientLookupOK(t *testing.T) {
 		Question:           "請問義美小泡芙多少錢",
 		NormalizedQuestion: "請問義美小泡芙多少錢",
 		CacheHint:          &contracts.CacheHint{LookupType: "price", Target: "義美小泡芙"},
-	}, time.Second)
+	}, 5*time.Second)
 	if err != nil {
 		t.Fatalf("Lookup returned error: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestCLIClientLookupAuthRequired(t *testing.T) {
 		Mode:               contracts.ModeBrowserLookup,
 		Question:           "auth_required momo",
 		NormalizedQuestion: "auth_required momo",
-	}, time.Second)
+	}, 5*time.Second)
 	if err != nil {
 		t.Fatalf("Lookup returned error: %v", err)
 	}
@@ -53,9 +53,38 @@ func TestCLIClientInvalidJSON(t *testing.T) {
 		Mode:               contracts.ModePublicLookup,
 		Question:           "test",
 		NormalizedQuestion: "test",
-	}, time.Second)
+	}, 5*time.Second)
 	if err == nil || !strings.Contains(err.Error(), "invalid lookup worker JSON") {
 		t.Fatalf("expected invalid JSON error, got %v", err)
+	}
+}
+
+func TestCLIClientRejectsUngroundedOK(t *testing.T) {
+	script := writeScript(t, "empty-ok.sh", "#!/bin/sh\necho '{\"status\":\"ok\"}'\n")
+	client := NewCLIClient(script)
+	_, err := client.Lookup(context.Background(), contracts.LookupRequest{
+		Mode:               contracts.ModePublicLookup,
+		Question:           "test",
+		NormalizedQuestion: "test",
+	}, 5*time.Second)
+	if err == nil || !strings.Contains(err.Error(), "requires answer") {
+		t.Fatalf("expected grounded ok validation error, got %v", err)
+	}
+}
+
+func TestCLIClientParsesQuotedCommand(t *testing.T) {
+	script := writeScript(t, "quoted worker.sh", "#!/bin/sh\ncat >/dev/null\nprintf '{\"status\":\"ok\",\"answer\":\"ok\",\"observed_at\":\"2026-05-28T12:00:00Z\",\"evidence\":[{\"source\":\"s\"}]}'\n")
+	client := NewCLIClient("'" + script + "'")
+	got, err := client.Lookup(context.Background(), contracts.LookupRequest{
+		Mode:               contracts.ModePublicLookup,
+		Question:           "test",
+		NormalizedQuestion: "test",
+	}, 5*time.Second)
+	if err != nil {
+		t.Fatalf("Lookup returned error: %v", err)
+	}
+	if got.Status != contracts.StatusOK {
+		t.Fatalf("Status = %s", got.Status)
 	}
 }
 

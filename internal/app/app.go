@@ -76,6 +76,9 @@ func (a *App) handleLookup(ctx context.Context, text string, result contracts.Ro
 		if err == nil {
 			switch entry.State {
 			case cache.StateFresh:
+				if entry.Response.Status == contracts.StatusAuthRequired {
+					return authRequiredReply(entry.Response), nil
+				}
 				return formatLookupReply(entry.Response, true, false), nil
 			case cache.StateStale:
 				stale = entry
@@ -105,7 +108,6 @@ func (a *App) handleLookup(ctx context.Context, text string, result contracts.Ro
 	}
 
 	if response.Status == contracts.StatusAuthRequired {
-		a.cacheResponse(ctx, key, result, response, now)
 		return authRequiredReply(response), nil
 	}
 

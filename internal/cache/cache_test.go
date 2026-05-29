@@ -76,7 +76,7 @@ func TestTTLFor(t *testing.T) {
 	if got := TTLFor(result, contracts.LookupResponse{Status: contracts.StatusNoResult}); got != 5*time.Minute {
 		t.Fatalf("no_result ttl = %s", got)
 	}
-	if got := TTLFor(result, contracts.LookupResponse{Status: contracts.StatusAuthRequired}); got != time.Minute {
+	if got := TTLFor(result, contracts.LookupResponse{Status: contracts.StatusAuthRequired}); got != 0 {
 		t.Fatalf("auth_required ttl = %s", got)
 	}
 	if got := TTLFor(result, contracts.LookupResponse{Status: contracts.StatusError}); got != 0 {

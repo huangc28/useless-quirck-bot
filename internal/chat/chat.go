@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const chatSystemPrompt = "Reply in concise Traditional Chinese. You can answer general chat and mention that the bot can help search website data."
@@ -38,7 +39,7 @@ type LiveResponder struct {
 
 func NewLiveResponder(apiKey, model, endpoint string, httpClient *http.Client) *LiveResponder {
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		httpClient = &http.Client{Timeout: 15 * time.Second}
 	}
 	return &LiveResponder{
 		apiKey:     apiKey,

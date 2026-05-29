@@ -109,6 +109,23 @@ func TestHandleMessageAuthRequired(t *testing.T) {
 	}
 }
 
+func TestHandleMessageCachedAuthRequired(t *testing.T) {
+	app := testApp()
+	app.Router = fakeRouter{result: browserResult()}
+	app.Cache = &fakeCache{entry: cache.Entry{State: cache.StateFresh, Response: contracts.LookupResponse{Status: contracts.StatusAuthRequired}}}
+
+	reply, err := app.HandleMessage(context.Background(), "請問 momo 義美小泡芙多少錢")
+	if err != nil {
+		t.Fatalf("HandleMessage returned error: %v", err)
+	}
+	if !strings.Contains(reply, "browser profile") {
+		t.Fatalf("reply = %q", reply)
+	}
+	if app.Worker.(*fakeWorker).calls != 0 {
+		t.Fatal("fresh auth_required cache should skip worker")
+	}
+}
+
 func TestHandleMessageStaleIfWorkerError(t *testing.T) {
 	stale := "stale"
 	_ = stale

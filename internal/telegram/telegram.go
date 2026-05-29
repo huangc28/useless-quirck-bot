@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const defaultAPIBase = "https://api.telegram.org"
@@ -49,7 +50,7 @@ type HTTPSender struct {
 
 func NewHTTPSender(token string, httpClient *http.Client) *HTTPSender {
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		httpClient = &http.Client{Timeout: 15 * time.Second}
 	}
 	return &HTTPSender{token: token, apiBase: defaultAPIBase, httpClient: httpClient}
 }

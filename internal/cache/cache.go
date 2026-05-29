@@ -213,7 +213,7 @@ func TTLFor(result contracts.RouterResult, response contracts.LookupResponse) ti
 	case contracts.StatusNoResult:
 		return 5 * time.Minute
 	case contracts.StatusAuthRequired:
-		return 1 * time.Minute
+		return 0
 	}
 
 	if result.CacheHint != nil && strings.EqualFold(result.CacheHint.LookupType, "price") {

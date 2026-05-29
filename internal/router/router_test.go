@@ -81,6 +81,26 @@ func TestValidateResultUnknownModeFallsBack(t *testing.T) {
 	}
 }
 
+func TestValidateResultRejectsInvalidConfidenceAndMissingQuestion(t *testing.T) {
+	_, decision := ValidateResult(contracts.RouterResult{
+		Mode:               contracts.ModePublicLookup,
+		Confidence:         1.5,
+		NormalizedQuestion: "請問義美小泡芙多少錢",
+	}, 0.65)
+	if decision.Kind != DecisionFallback {
+		t.Fatalf("invalid confidence decision = %s", decision.Kind)
+	}
+
+	_, decision = ValidateResult(contracts.RouterResult{
+		Mode:       contracts.ModePublicLookup,
+		Confidence: 0.9,
+		Reason:     "price lookup",
+	}, 0.65)
+	if decision.Kind != DecisionFallback {
+		t.Fatalf("missing question decision = %s", decision.Kind)
+	}
+}
+
 func TestLiveClientParsesRouterJSON(t *testing.T) {
 	httpClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
@@ -107,6 +127,21 @@ func TestLiveClientInvalidJSON(t *testing.T) {
 	client := NewLiveClient("key", "model", "http://router.test", httpClient, 0.65)
 	if _, err := client.Route(context.Background(), "請問義美小泡芙多少錢"); err == nil {
 		t.Fatal("expected invalid JSON error")
+	}
+}
+
+func TestLiveClientReturnsLowConfidenceForAppClarification(t *testing.T) {
+	httpClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return jsonResponse(200, `{"mode":"public_lookup","confidence":0.2,"reason":"uncertain","normalized_question":"泡芙"}`), nil
+	})}
+
+	client := NewLiveClient("key", "model", "http://router.test", httpClient, 0.65)
+	got, err := client.Route(context.Background(), "泡芙")
+	if err != nil {
+		t.Fatalf("Route returned error: %v", err)
+	}
+	if got.Confidence != 0.2 {
+		t.Fatalf("Confidence = %f", got.Confidence)
 	}
 }
 
