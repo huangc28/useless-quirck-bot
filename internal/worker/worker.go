@@ -84,11 +84,20 @@ func validateLookupResponse(response contracts.LookupResponse) error {
 		return err
 	}
 	if response.Status == contracts.StatusOK {
-		if strings.TrimSpace(response.Answer) == "" || strings.TrimSpace(response.ObservedAt) == "" || len(response.Evidence) == 0 {
-			return errors.New("ok lookup response requires answer, observed_at, and evidence")
+		if strings.TrimSpace(response.Answer) == "" || strings.TrimSpace(response.ObservedAt) == "" || !hasUsableEvidence(response.Evidence) {
+			return errors.New("ok lookup response requires answer, observed_at, and source evidence")
 		}
 	}
 	return nil
+}
+
+func hasUsableEvidence(evidence []contracts.Evidence) bool {
+	for _, ev := range evidence {
+		if strings.TrimSpace(ev.Source) != "" && strings.TrimSpace(ev.URL) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func decodeSingleResponse(data []byte) (contracts.LookupResponse, error) {
