@@ -1,0 +1,96 @@
+# Interview Chatbot
+
+## Overview
+
+Telegram chatbot MVP for website data lookup. The backend receives a chat message, routes it as `general_chat`, `public_lookup`, or `browser_lookup`, checks SQLite cache for lookup modes, calls a local lookup worker when needed, and replies with answer text, source evidence, and query time.
+
+## Architecture
+
+Flow: Telegram webhook -> Go server -> LLM router -> general chat or lookup path -> SQLite cache -> local lookup worker -> Telegram reply.
+
+Key packages:
+- `internal/router` classifies messages and supports mock/live LLM adapters.
+- `internal/chat` handles general chat without lookup/cache.
+- `internal/cache` stores lookup results with TTL and stale-if-error behavior.
+- `internal/worker` invokes a local CLI worker through stdin/stdout JSON.
+- `internal/app` orchestrates routing, cache, worker, and reply formatting.
+- `internal/telegram` parses webhook payloads and sends Telegram messages.
+
+## Environment
+
+Copy `.env.example` values into your shell or local environment manager.
+
+```sh
+SERVER_ADDR=:8080
+TELEGRAM_BOT_TOKEN=
+LLM_MODE=mock
+LOOKUP_WORKER_MODE=mock
+LOOKUP_WORKER_CMD=
+CACHE_PATH=data/cache.db
+```
+
+`LLM_MODE=mock|live` controls router/general-chat adapters. `LOOKUP_WORKER_MODE=mock|live` controls whether an empty worker command defaults to `./scripts/mock_lookup_worker.sh`.
+
+## Run Locally
+
+```sh
+GOCACHE="$PWD/.gocache" go test ./...
+GOCACHE="$PWD/.gocache" go run ./cmd/server
+```
+
+The server listens on `SERVER_ADDR` and exposes `POST /telegram/webhook` plus `GET /healthz`.
+
+## Telegram Webhook
+
+Configure the Telegram bot webhook to your HTTPS endpoint that forwards to:
+
+```text
+POST /telegram/webhook
+```
+
+The handler parses `message.chat.id` and `message.text`, calls the app orchestrator, then sends `sendMessage` back to the source chat.
+
+## Mock Fallback
+
+Default mock mode is runnable without LLM or browser credentials:
+
+```sh
+LLM_MODE=mock LOOKUP_WORKER_MODE=mock GOCACHE="$PWD/.gocache" go run ./cmd/server
+```
+
+Mock router fixtures cover general chat, public lookup, browser lookup, URL lookup, auth-required, no-result, and worker error paths through tests and `scripts/mock_lookup_worker.sh`.
+
+## Live Lookup Worker
+
+Set `LOOKUP_WORKER_MODE=live` and point `LOOKUP_WORKER_CMD` to a local agent command that reads one lookup request JSON object from stdin and writes one lookup response JSON object to stdout.
+
+Example shape:
+
+```sh
+LOOKUP_WORKER_CMD='codex exec --search --output-schema schemas/lookup_response.schema.json'
+```
+
+Browser lookup requires Chrome MCP/browser profile setup. If a target site requires login, prepare the browser session in the local browser profile used by the worker before retrying the Telegram request.
+
+## Demo Script
+
+1. `你好`
+2. `請問義美小泡芙多少錢`
+3. `請問 momo 義美小泡芙多少錢`
+
+## Cache Behavior
+
+Lookup modes use SQLite TTL cache. Cache keys prefer router `cache_hint` metadata such as lookup type, target, site, and URL; fallback keys use mode plus normalized question. Price lookups use a 30 minute TTL, general lookup results use 60 minutes, `no_result` uses 5 minutes, and `error` is not cached. Requests containing `重新查`, `更新`, `refresh`, or `不要快取` bypass cache.
+
+If a cached entry is expired and refresh fails, the bot returns the stale result with explicit expired labeling instead of pretending the refresh succeeded.
+
+## Auth Wall Behavior
+
+For `auth_required`, the bot asks the operator to prepare the browser session used by Chrome MCP/browser automation. Users should do not send third-party credentials in Telegram.
+
+## Verification
+
+```sh
+GOCACHE="$PWD/.gocache" go test ./...
+rg "請問義美小泡芙多少錢|請問 momo 義美小泡芙多少錢|Auth Wall Behavior|Mock Fallback" README.md
+```
