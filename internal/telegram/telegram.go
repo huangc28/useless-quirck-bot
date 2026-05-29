@@ -15,7 +15,8 @@ import (
 const defaultAPIBase = "https://api.telegram.org"
 
 type Update struct {
-	Message *Message `json:"message"`
+	UpdateID int64    `json:"update_id"`
+	Message  *Message `json:"message"`
 }
 
 type Message struct {
@@ -27,15 +28,15 @@ type Chat struct {
 	ID int64 `json:"id"`
 }
 
-func ParseUpdate(r io.Reader) (chatID int64, text string, ok bool, err error) {
+func ParseUpdate(r io.Reader) (updateID int64, chatID int64, text string, ok bool, err error) {
 	var update Update
 	if err := json.NewDecoder(r).Decode(&update); err != nil {
-		return 0, "", false, err
+		return 0, 0, "", false, err
 	}
 	if update.Message == nil || update.Message.Chat.ID == 0 || strings.TrimSpace(update.Message.Text) == "" {
-		return 0, "", false, nil
+		return update.UpdateID, 0, "", false, nil
 	}
-	return update.Message.Chat.ID, update.Message.Text, true, nil
+	return update.UpdateID, update.Message.Chat.ID, update.Message.Text, true, nil
 }
 
 type Sender interface {

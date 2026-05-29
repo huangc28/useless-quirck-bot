@@ -11,12 +11,15 @@ import (
 
 func TestParseUpdate(t *testing.T) {
 	payload := `{"update_id":1,"message":{"chat":{"id":12345},"text":"請問義美小泡芙多少錢"}}`
-	chatID, text, ok, err := ParseUpdate(strings.NewReader(payload))
+	updateID, chatID, text, ok, err := ParseUpdate(strings.NewReader(payload))
 	if err != nil {
 		t.Fatalf("ParseUpdate returned error: %v", err)
 	}
 	if !ok {
 		t.Fatal("expected ok")
+	}
+	if updateID != 1 {
+		t.Fatalf("updateID = %d", updateID)
 	}
 	if chatID != 12345 {
 		t.Fatalf("chatID = %d", chatID)
@@ -27,7 +30,7 @@ func TestParseUpdate(t *testing.T) {
 }
 
 func TestParseUpdateIgnoresNonText(t *testing.T) {
-	_, _, ok, err := ParseUpdate(strings.NewReader(`{"message":{"chat":{"id":12345}}}`))
+	_, _, _, ok, err := ParseUpdate(strings.NewReader(`{"message":{"chat":{"id":12345}}}`))
 	if err != nil {
 		t.Fatalf("ParseUpdate returned error: %v", err)
 	}

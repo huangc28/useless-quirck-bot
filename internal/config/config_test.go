@@ -16,6 +16,15 @@ func TestLoadFromEnvDefaults(t *testing.T) {
 	if cfg.LLMMode != "mock" {
 		t.Fatalf("LLMMode = %q", cfg.LLMMode)
 	}
+	if cfg.CodexRouterCommand != DefaultCodexRouterCommand {
+		t.Fatalf("CodexRouterCommand = %q", cfg.CodexRouterCommand)
+	}
+	if cfg.CodexChatCommand != DefaultCodexChatCommand {
+		t.Fatalf("CodexChatCommand = %q", cfg.CodexChatCommand)
+	}
+	if cfg.CodexTimeout != 60*time.Second {
+		t.Fatalf("CodexTimeout = %s", cfg.CodexTimeout)
+	}
 	if cfg.LookupWorkerMode != "mock" {
 		t.Fatalf("LookupWorkerMode = %q", cfg.LookupWorkerMode)
 	}
@@ -25,10 +34,10 @@ func TestLoadFromEnvDefaults(t *testing.T) {
 	if cfg.RouterConfidenceThreshold != 0.65 {
 		t.Fatalf("RouterConfidenceThreshold = %f", cfg.RouterConfidenceThreshold)
 	}
-	if cfg.PublicLookupTimeout != 20*time.Second {
+	if cfg.PublicLookupTimeout != 130*time.Second {
 		t.Fatalf("PublicLookupTimeout = %s", cfg.PublicLookupTimeout)
 	}
-	if cfg.BrowserLookupTimeout != 60*time.Second {
+	if cfg.BrowserLookupTimeout != 130*time.Second {
 		t.Fatalf("BrowserLookupTimeout = %s", cfg.BrowserLookupTimeout)
 	}
 }
@@ -40,8 +49,9 @@ func TestLoadFromEnvOverrides(t *testing.T) {
 	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
 	t.Setenv("TELEGRAM_WEBHOOK_SECRET", "secret")
 	t.Setenv("LLM_MODE", "live")
-	t.Setenv("OPENAI_API_KEY", "test-key")
-	t.Setenv("OPENAI_MODEL", "test-model")
+	t.Setenv("CODEX_ROUTER_CMD", "codex router")
+	t.Setenv("CODEX_CHAT_CMD", "codex chat")
+	t.Setenv("CODEX_TIMEOUT", "45s")
 	t.Setenv("LOOKUP_WORKER_MODE", "live")
 	t.Setenv("LOOKUP_WORKER_CMD", "codex exec")
 	t.Setenv("CACHE_PATH", "data/test.db")
@@ -66,11 +76,14 @@ func TestLoadFromEnvOverrides(t *testing.T) {
 	if cfg.LLMMode != "live" {
 		t.Fatalf("LLMMode = %q", cfg.LLMMode)
 	}
-	if cfg.OpenAIAPIKey != "test-key" {
-		t.Fatalf("OpenAIAPIKey = %q", cfg.OpenAIAPIKey)
+	if cfg.CodexRouterCommand != "codex router" {
+		t.Fatalf("CodexRouterCommand = %q", cfg.CodexRouterCommand)
 	}
-	if cfg.OpenAIModel != "test-model" {
-		t.Fatalf("OpenAIModel = %q", cfg.OpenAIModel)
+	if cfg.CodexChatCommand != "codex chat" {
+		t.Fatalf("CodexChatCommand = %q", cfg.CodexChatCommand)
+	}
+	if cfg.CodexTimeout != 45*time.Second {
+		t.Fatalf("CodexTimeout = %s", cfg.CodexTimeout)
 	}
 	if cfg.LookupWorkerMode != "live" {
 		t.Fatalf("LookupWorkerMode = %q", cfg.LookupWorkerMode)
@@ -94,15 +107,19 @@ func TestLoadFromEnvOverrides(t *testing.T) {
 
 func TestLoadFromEnvInvalidDurationsFallback(t *testing.T) {
 	clearConfigEnv(t)
+	t.Setenv("CODEX_TIMEOUT", "not-good")
 	t.Setenv("PUBLIC_LOOKUP_TIMEOUT", "bad")
 	t.Setenv("BROWSER_LOOKUP_TIMEOUT", "also-bad")
 
 	cfg := LoadFromEnv()
 
-	if cfg.PublicLookupTimeout != 20*time.Second {
+	if cfg.CodexTimeout != 60*time.Second {
+		t.Fatalf("CodexTimeout = %s", cfg.CodexTimeout)
+	}
+	if cfg.PublicLookupTimeout != 130*time.Second {
 		t.Fatalf("PublicLookupTimeout = %s", cfg.PublicLookupTimeout)
 	}
-	if cfg.BrowserLookupTimeout != 60*time.Second {
+	if cfg.BrowserLookupTimeout != 130*time.Second {
 		t.Fatalf("BrowserLookupTimeout = %s", cfg.BrowserLookupTimeout)
 	}
 }
@@ -115,8 +132,9 @@ func clearConfigEnv(t *testing.T) {
 		"TELEGRAM_BOT_TOKEN",
 		"TELEGRAM_WEBHOOK_SECRET",
 		"LLM_MODE",
-		"OPENAI_API_KEY",
-		"OPENAI_MODEL",
+		"CODEX_ROUTER_CMD",
+		"CODEX_CHAT_CMD",
+		"CODEX_TIMEOUT",
 		"LOOKUP_WORKER_MODE",
 		"LOOKUP_WORKER_CMD",
 		"CACHE_PATH",

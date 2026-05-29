@@ -1,12 +1,11 @@
 package router
 
 import (
-	"bytes"
 	"context"
-	"io"
-	"net/http"
-	"strings"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"interview-chatbot/internal/contracts"
 )
@@ -111,14 +110,8 @@ func TestValidateResultRejectsInvalidConfidenceAndMissingQuestion(t *testing.T) 
 }
 
 func TestLiveClientParsesRouterJSON(t *testing.T) {
-	httpClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
-			t.Fatal("missing bearer token")
-		}
-		return jsonResponse(200, `{"mode":"public_lookup","confidence":0.91,"reason":"price lookup","normalized_question":"請問義美小泡芙多少錢","cache_hint":{"lookup_type":"price","target":"義美小泡芙"}}`), nil
-	})}
-
-	client := NewLiveClient("key", "model", "http://router.test", httpClient, 0.65)
+	script := writeRouterScript(t, "router.sh", "#!/bin/sh\ncat >/dev/null\nprintf '{\"mode\":\"public_lookup\",\"confidence\":0.91,\"reason\":\"price lookup\",\"normalized_question\":\"請問義美小泡芙多少錢\",\"cache_hint\":{\"lookup_type\":\"price\",\"target\":\"義美小泡芙\"}}'\n")
+	client := NewLiveClient(script, 5*time.Second, 0.65)
 	got, err := client.Route(context.Background(), "請問義美小泡芙多少錢")
 	if err != nil {
 		t.Fatalf("Route returned error: %v", err)
@@ -129,22 +122,16 @@ func TestLiveClientParsesRouterJSON(t *testing.T) {
 }
 
 func TestLiveClientInvalidJSON(t *testing.T) {
-	httpClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		return jsonResponse(200, `not json`), nil
-	})}
-
-	client := NewLiveClient("key", "model", "http://router.test", httpClient, 0.65)
+	script := writeRouterScript(t, "invalid.sh", "#!/bin/sh\ncat >/dev/null\nprintf 'not json'\n")
+	client := NewLiveClient(script, 5*time.Second, 0.65)
 	if _, err := client.Route(context.Background(), "請問義美小泡芙多少錢"); err == nil {
 		t.Fatal("expected invalid JSON error")
 	}
 }
 
 func TestLiveClientReturnsLowConfidenceForAppClarification(t *testing.T) {
-	httpClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		return jsonResponse(200, `{"mode":"public_lookup","confidence":0.2,"reason":"uncertain","normalized_question":"泡芙"}`), nil
-	})}
-
-	client := NewLiveClient("key", "model", "http://router.test", httpClient, 0.65)
+	script := writeRouterScript(t, "low-confidence.sh", "#!/bin/sh\ncat >/dev/null\nprintf '{\"mode\":\"public_lookup\",\"confidence\":0.2,\"reason\":\"uncertain\",\"normalized_question\":\"泡芙\"}'\n")
+	client := NewLiveClient(script, 5*time.Second, 0.65)
 	got, err := client.Route(context.Background(), "泡芙")
 	if err != nil {
 		t.Fatalf("Route returned error: %v", err)
@@ -155,11 +142,8 @@ func TestLiveClientReturnsLowConfidenceForAppClarification(t *testing.T) {
 }
 
 func TestLiveClientDoesNotInventMissingNormalizedQuestion(t *testing.T) {
-	httpClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		return jsonResponse(200, `{"mode":"public_lookup","confidence":0.9,"reason":"price lookup"}`), nil
-	})}
-
-	client := NewLiveClient("key", "model", "http://router.test", httpClient, 0.65)
+	script := writeRouterScript(t, "missing-question.sh", "#!/bin/sh\ncat >/dev/null\nprintf '{\"mode\":\"public_lookup\",\"confidence\":0.9,\"reason\":\"price lookup\"}'\n")
+	client := NewLiveClient(script, 5*time.Second, 0.65)
 	got, err := client.Route(context.Background(), "請問義美小泡芙多少錢")
 	if err != nil {
 		t.Fatalf("Route returned error: %v", err)
@@ -173,24 +157,18 @@ func TestLiveClientDoesNotInventMissingNormalizedQuestion(t *testing.T) {
 	}
 }
 
-func TestLiveClientRequiresCredentials(t *testing.T) {
-	client := NewLiveClient("", "", "http://example.test", nil, 0.65)
+func TestLiveClientRequiresCommand(t *testing.T) {
+	client := NewLiveClient("", 5*time.Second, 0.65)
 	if _, err := client.Route(context.Background(), "你好"); err == nil {
-		t.Fatal("expected missing API key error")
+		t.Fatal("expected missing command error")
 	}
 }
 
-type roundTripFunc func(*http.Request) (*http.Response, error)
-
-func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
-	return f(r)
-}
-
-func jsonResponse(status int, body string) *http.Response {
-	return &http.Response{
-		StatusCode: status,
-		Status:     http.StatusText(status),
-		Body:       io.NopCloser(bytes.NewBufferString(body)),
-		Header:     make(http.Header),
+func writeRouterScript(t *testing.T, name, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
 	}
+	return path
 }

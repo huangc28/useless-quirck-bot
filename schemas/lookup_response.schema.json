@@ -3,7 +3,7 @@
   "title": "LookupResponse",
   "type": "object",
   "additionalProperties": false,
-  "required": ["status"],
+  "required": ["status", "answer", "evidence", "observed_at", "error"],
   "properties": {
     "status": {
       "type": "string",
@@ -17,6 +17,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
+        "required": ["title", "url", "source", "snippet", "observed_at"],
         "properties": {
           "title": { "type": "string" },
           "url": { "type": "string" },

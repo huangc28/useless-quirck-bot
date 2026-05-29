@@ -1,12 +1,13 @@
 package chat
 
 import (
-	"bytes"
 	"context"
-	"io"
-	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestMockResponderGreeting(t *testing.T) {
@@ -23,14 +24,8 @@ func TestMockResponderGreeting(t *testing.T) {
 }
 
 func TestLiveResponderParsesReply(t *testing.T) {
-	httpClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
-			t.Fatal("missing bearer token")
-		}
-		return response(200, `{"reply":"你好，我可以協助查找網站資料。"}`), nil
-	})}
-
-	responder := NewLiveResponder("key", "model", "http://chat.test", httpClient)
+	script := writeChatScript(t, "chat.sh", "#!/bin/sh\ncat >/dev/null\nprintf '你好，我可以協助查找網站資料。'\n")
+	responder := NewLiveResponder(script, 5*time.Second)
 	reply, err := responder.Respond(context.Background(), "你好")
 	if err != nil {
 		t.Fatalf("Respond returned error: %v", err)
@@ -40,24 +35,38 @@ func TestLiveResponderParsesReply(t *testing.T) {
 	}
 }
 
-func TestLiveResponderRequiresCredentials(t *testing.T) {
-	responder := NewLiveResponder("", "", "http://chat.test", nil)
+func TestLiveResponderRequiresCommand(t *testing.T) {
+	responder := NewLiveResponder("", 5*time.Second)
 	if _, err := responder.Respond(context.Background(), "你好"); err == nil {
-		t.Fatal("expected missing API key error")
+		t.Fatal("expected missing command error")
 	}
 }
 
-type roundTripFunc func(*http.Request) (*http.Response, error)
-
-func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
-	return f(r)
+func TestLiveResponderRejectsEmptyOutput(t *testing.T) {
+	script := writeChatScript(t, "empty.sh", "#!/bin/sh\ncat >/dev/null\n")
+	responder := NewLiveResponder(script, 5*time.Second)
+	if _, err := responder.Respond(context.Background(), "你好"); err == nil {
+		t.Fatal("expected empty response error")
+	}
 }
 
-func response(status int, body string) *http.Response {
-	return &http.Response{
-		StatusCode: status,
-		Status:     http.StatusText(status),
-		Body:       io.NopCloser(bytes.NewBufferString(body)),
-		Header:     make(http.Header),
+func TestLiveResponderTimeout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell sleep script is Unix-specific")
 	}
+	script := writeChatScript(t, "sleep.sh", "#!/bin/sh\nsleep 2\nprintf done\n")
+	responder := NewLiveResponder(script, 10*time.Millisecond)
+	_, err := responder.Respond(context.Background(), "你好")
+	if err == nil || !strings.Contains(err.Error(), "timeout") {
+		t.Fatalf("expected timeout error, got %v", err)
+	}
+}
+
+func writeChatScript(t *testing.T, name, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	return path
 }

@@ -3,7 +3,7 @@
   "title": "RouterResult",
   "type": "object",
   "additionalProperties": false,
-  "required": ["mode", "confidence", "reason", "normalized_question"],
+  "required": ["mode", "confidence", "reason", "normalized_question", "cache_hint", "force_refresh"],
   "properties": {
     "mode": {
       "type": "string",
@@ -23,6 +23,7 @@
     "cache_hint": {
       "type": "object",
       "additionalProperties": false,
+      "required": ["lookup_type", "target", "site", "url"],
       "properties": {
         "lookup_type": { "type": "string" },
         "target": { "type": "string" },

@@ -177,6 +177,24 @@ func TestHandleMessageWorkerErrorNoStaleIsGraceful(t *testing.T) {
 	}
 }
 
+func TestHandleMessageDefaultPublicLookupTimeoutAllowsLiveWorkerLatency(t *testing.T) {
+	app := testApp()
+	app.Config.PublicLookupTimeout = 0
+	app.Router = fakeRouter{result: priceResult()}
+	app.Worker = &fakeWorker{
+		response:   okResponse(),
+		minTimeout: 25 * time.Second,
+	}
+
+	reply, err := app.HandleMessage(context.Background(), "義美小泡芙多少錢?")
+	if err != nil {
+		t.Fatalf("HandleMessage returned error: %v", err)
+	}
+	if !strings.Contains(reply, "約 NT$59") {
+		t.Fatalf("reply = %q", reply)
+	}
+}
+
 func TestHandleMessageInvalidJSONWorkerError(t *testing.T) {
 	invalidJSON := "invalid JSON"
 	_ = invalidJSON
@@ -261,13 +279,17 @@ func (c *fakeCache) Put(context.Context, string, contracts.RouterResult, contrac
 }
 
 type fakeWorker struct {
-	response contracts.LookupResponse
-	err      error
-	calls    int
+	response   contracts.LookupResponse
+	err        error
+	minTimeout time.Duration
+	calls      int
 }
 
-func (w *fakeWorker) Lookup(context.Context, contracts.LookupRequest, time.Duration) (contracts.LookupResponse, error) {
+func (w *fakeWorker) Lookup(_ context.Context, _ contracts.LookupRequest, timeout time.Duration) (contracts.LookupResponse, error) {
 	w.calls++
+	if w.minTimeout > 0 && timeout < w.minTimeout {
+		return contracts.LookupResponse{}, errors.New("lookup worker killed before live public lookup completed")
+	}
 	return w.response, w.err
 }
 

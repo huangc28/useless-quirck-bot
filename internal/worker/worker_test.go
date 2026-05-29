@@ -85,8 +85,21 @@ func TestCLIClientRejectsEmptyEvidenceObject(t *testing.T) {
 	}
 }
 
+func TestCLIClientRejectsEvidenceWithoutObservedTimeAndContext(t *testing.T) {
+	script := writeScript(t, "weak-evidence.sh", "#!/bin/sh\necho '{\"status\":\"ok\",\"answer\":\"ok\",\"observed_at\":\"2026-05-28T12:00:00Z\",\"evidence\":[{\"source\":\"s\",\"url\":\"https://example.test\"}]}'\n")
+	client := NewCLIClient(script)
+	_, err := client.Lookup(context.Background(), contracts.LookupRequest{
+		Mode:               contracts.ModePublicLookup,
+		Question:           "test",
+		NormalizedQuestion: "test",
+	}, 5*time.Second)
+	if err == nil || !strings.Contains(err.Error(), "source evidence") {
+		t.Fatalf("expected source evidence validation error, got %v", err)
+	}
+}
+
 func TestCLIClientParsesQuotedCommand(t *testing.T) {
-	script := writeScript(t, "quoted worker.sh", "#!/bin/sh\ncat >/dev/null\nprintf '{\"status\":\"ok\",\"answer\":\"ok\",\"observed_at\":\"2026-05-28T12:00:00Z\",\"evidence\":[{\"source\":\"s\",\"url\":\"https://example.test\"}]}'\n")
+	script := writeScript(t, "quoted worker.sh", "#!/bin/sh\ncat >/dev/null\nprintf '{\"status\":\"ok\",\"answer\":\"ok\",\"observed_at\":\"2026-05-28T12:00:00Z\",\"evidence\":[{\"source\":\"s\",\"url\":\"https://example.test\",\"snippet\":\"page context\",\"observed_at\":\"2026-05-28T12:00:00Z\"}]}'\n")
 	client := NewCLIClient("'" + script + "'")
 	got, err := client.Lookup(context.Background(), contracts.LookupRequest{
 		Mode:               contracts.ModePublicLookup,

@@ -7,10 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os/exec"
 	"strings"
 	"time"
 
+	"interview-chatbot/internal/clirunner"
 	"interview-chatbot/internal/contracts"
 )
 
@@ -36,40 +36,16 @@ func (c *CLIClient) Lookup(ctx context.Context, request contracts.LookupRequest,
 	if request.Mode == contracts.ModeGeneralChat {
 		return contracts.LookupResponse{}, errors.New("general_chat is not a lookup worker mode")
 	}
-	parts, err := splitCommand(c.command)
-	if err != nil {
-		return contracts.LookupResponse{}, err
-	}
-	if len(parts) == 0 {
-		return contracts.LookupResponse{}, errors.New("lookup worker command is empty")
-	}
-
-	runCtx := ctx
-	cancel := func() {}
-	if timeout > 0 {
-		runCtx, cancel = context.WithTimeout(ctx, timeout)
-	}
-	defer cancel()
-
 	payload, err := json.Marshal(request)
 	if err != nil {
 		return contracts.LookupResponse{}, err
 	}
-	cmd := exec.CommandContext(runCtx, parts[0], parts[1:]...)
-	cmd.Stdin = bytes.NewReader(append(payload, '\n'))
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		if runCtx.Err() != nil {
-			return contracts.LookupResponse{}, fmt.Errorf("lookup worker timeout: %w", runCtx.Err())
-		}
-		return contracts.LookupResponse{}, fmt.Errorf("lookup worker failed: %w: %s", err, strings.TrimSpace(stderr.String()))
+	stdout, err := clirunner.Run(ctx, c.command, append(payload, '\n'), timeout)
+	if err != nil {
+		return contracts.LookupResponse{}, fmt.Errorf("lookup worker failed: %w", err)
 	}
 
-	response, err := decodeSingleResponse(stdout.Bytes())
+	response, err := decodeSingleResponse(stdout)
 	if err != nil {
 		return contracts.LookupResponse{}, err
 	}
@@ -93,7 +69,10 @@ func validateLookupResponse(response contracts.LookupResponse) error {
 
 func hasUsableEvidence(evidence []contracts.Evidence) bool {
 	for _, ev := range evidence {
-		if strings.TrimSpace(ev.Source) != "" && strings.TrimSpace(ev.URL) != "" {
+		hasIdentity := strings.TrimSpace(ev.Source) != "" && strings.TrimSpace(ev.URL) != ""
+		hasObservedTime := strings.TrimSpace(ev.ObservedAt) != ""
+		hasContext := strings.TrimSpace(ev.Snippet) != "" || strings.TrimSpace(ev.Title) != ""
+		if hasIdentity && hasObservedTime && hasContext {
 			return true
 		}
 	}
@@ -111,45 +90,4 @@ func decodeSingleResponse(data []byte) (contracts.LookupResponse, error) {
 		return contracts.LookupResponse{}, errors.New("lookup worker returned more than one JSON value")
 	}
 	return response, nil
-}
-
-func splitCommand(command string) ([]string, error) {
-	var parts []string
-	var current strings.Builder
-	var quote rune
-	escaped := false
-	for _, r := range command {
-		switch {
-		case escaped:
-			current.WriteRune(r)
-			escaped = false
-		case r == '\\':
-			escaped = true
-		case quote != 0:
-			if r == quote {
-				quote = 0
-			} else {
-				current.WriteRune(r)
-			}
-		case r == '\'' || r == '"':
-			quote = r
-		case r == ' ' || r == '\t' || r == '\n':
-			if current.Len() > 0 {
-				parts = append(parts, current.String())
-				current.Reset()
-			}
-		default:
-			current.WriteRune(r)
-		}
-	}
-	if escaped {
-		current.WriteRune('\\')
-	}
-	if quote != 0 {
-		return nil, errors.New("unterminated quote in lookup worker command")
-	}
-	if current.Len() > 0 {
-		parts = append(parts, current.String())
-	}
-	return parts, nil
 }

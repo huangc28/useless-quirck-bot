@@ -8,12 +8,15 @@ import (
 
 const DefaultServerAddr = ":8080"
 const DefaultLLMMode = "mock"
+const DefaultCodexRouterCommand = "codex exec --sandbox read-only --output-schema schemas/router_result.schema.json -"
+const DefaultCodexChatCommand = "codex exec --sandbox read-only -"
 const DefaultLookupWorkerMode = "mock"
 const DefaultCachePath = "data/cache.db"
 const DefaultRouterConfidenceThreshold = 0.65
 
-var DefaultPublicLookupTimeout = 20 * time.Second
-var DefaultBrowserLookupTimeout = 60 * time.Second
+var DefaultCodexTimeout = 60 * time.Second
+var DefaultPublicLookupTimeout = 130 * time.Second
+var DefaultBrowserLookupTimeout = 130 * time.Second
 
 type Config struct {
 	ServerAddr                string
@@ -21,8 +24,9 @@ type Config struct {
 	TelegramBotToken          string
 	TelegramWebhookSecret     string
 	LLMMode                   string
-	OpenAIAPIKey              string
-	OpenAIModel               string
+	CodexRouterCommand        string
+	CodexChatCommand          string
+	CodexTimeout              time.Duration
 	LookupWorkerMode          string
 	LookupWorkerCommand       string
 	CachePath                 string
@@ -38,8 +42,9 @@ func LoadFromEnv() Config {
 		TelegramBotToken:          os.Getenv("TELEGRAM_BOT_TOKEN"),
 		TelegramWebhookSecret:     os.Getenv("TELEGRAM_WEBHOOK_SECRET"),
 		LLMMode:                   env("LLM_MODE", DefaultLLMMode),
-		OpenAIAPIKey:              os.Getenv("OPENAI_API_KEY"),
-		OpenAIModel:               os.Getenv("OPENAI_MODEL"),
+		CodexRouterCommand:        env("CODEX_ROUTER_CMD", DefaultCodexRouterCommand),
+		CodexChatCommand:          env("CODEX_CHAT_CMD", DefaultCodexChatCommand),
+		CodexTimeout:              envDuration("CODEX_TIMEOUT", DefaultCodexTimeout),
 		LookupWorkerMode:          env("LOOKUP_WORKER_MODE", DefaultLookupWorkerMode),
 		LookupWorkerCommand:       os.Getenv("LOOKUP_WORKER_CMD"),
 		CachePath:                 env("CACHE_PATH", DefaultCachePath),

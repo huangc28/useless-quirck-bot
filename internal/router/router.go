@@ -1,17 +1,15 @@
 package router
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"interview-chatbot/internal/clirunner"
 	"interview-chatbot/internal/contracts"
 )
 
@@ -20,7 +18,12 @@ const DecisionClarify = "clarify"
 const DecisionFallback = "fallback"
 
 const routerSystemPrompt = `Classify the user's message into exactly one mode: general_chat, public_lookup, or browser_lookup.
-Return only JSON matching the router schema fields: mode, confidence, reason, normalized_question, optional cache_hint, optional force_refresh.
+Use general_chat for greetings, thanks, and ordinary conversation.
+Use public_lookup when the user asks for public information but does not require a specific website or URL.
+Use browser_lookup when the user explicitly names a website, platform, or URL to inspect.
+Return only JSON matching the router schema fields: mode, confidence, reason, normalized_question, cache_hint, force_refresh.
+Always include cache_hint. Use empty strings for cache_hint fields that do not apply. Use force_refresh false unless the user explicitly asks to bypass cache.
+For price lookups, set cache_hint.lookup_type to "price" and cache_hint.target to the normalized product name when possible.
 You must not answer lookup questions.`
 
 type Client interface {
@@ -112,77 +115,31 @@ func (c MockClient) Route(_ context.Context, message string) (contracts.RouterRe
 }
 
 type LiveClient struct {
-	apiKey     string
-	model      string
-	endpoint   string
-	httpClient *http.Client
-	threshold  float64
+	command string
+	timeout time.Duration
 }
 
-func NewLiveClient(apiKey, model, endpoint string, httpClient *http.Client, threshold float64) *LiveClient {
-	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 15 * time.Second}
-	}
+func NewLiveClient(command string, timeout time.Duration, _ float64) *LiveClient {
 	return &LiveClient{
-		apiKey:     apiKey,
-		model:      model,
-		endpoint:   endpoint,
-		httpClient: httpClient,
-		threshold:  thresholdOrDefault(threshold),
+		command: strings.TrimSpace(command),
+		timeout: timeout,
 	}
 }
 
 func (c *LiveClient) Route(ctx context.Context, message string) (contracts.RouterResult, error) {
-	if strings.TrimSpace(c.apiKey) == "" {
-		return contracts.RouterResult{}, errors.New("missing API key")
-	}
-	if strings.TrimSpace(c.model) == "" {
-		return contracts.RouterResult{}, errors.New("missing model")
-	}
-	endpoint := c.endpoint
-	if endpoint == "" {
-		endpoint = "https://api.openai.com/v1/chat/completions"
-	}
-
-	body := map[string]any{
-		"model": c.model,
-		"messages": []map[string]string{
-			{"role": "system", "content": routerSystemPrompt},
-			{"role": "user", "content": message},
-		},
-		"temperature": 0,
-	}
-	payload, err := json.Marshal(body)
+	stdout, err := clirunner.Run(ctx, c.command, []byte(routerPrompt(message)), c.timeout)
 	if err != nil {
 		return contracts.RouterResult{}, err
 	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return contracts.RouterResult{}, err
-	}
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return contracts.RouterResult{}, err
-	}
-	defer resp.Body.Close()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return contracts.RouterResult{}, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return contracts.RouterResult{}, fmt.Errorf("router request failed: %s", resp.Status)
-	}
-
-	result, err := parseRouterResult(data)
+	result, err := parseRouterResult(stdout)
 	if err != nil {
 		return contracts.RouterResult{}, err
 	}
 	return result, nil
+}
+
+func routerPrompt(message string) string {
+	return fmt.Sprintf("%s\n\nUser message:\n%s\n", routerSystemPrompt, strings.TrimSpace(message))
 }
 
 func parseRouterResult(data []byte) (contracts.RouterResult, error) {

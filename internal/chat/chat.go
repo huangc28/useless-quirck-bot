@@ -1,18 +1,16 @@
 package chat
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"time"
+
+	"interview-chatbot/internal/clirunner"
 )
 
-const chatSystemPrompt = "Reply in concise Traditional Chinese. You can answer general chat and mention that the bot can help search website data."
+const chatSystemPrompt = "Reply in concise Traditional Chinese. Answer the Telegram user directly. Do not edit files, run commands, or browse."
 
 type Responder interface {
 	Respond(ctx context.Context, question string) (string, error)
@@ -31,99 +29,29 @@ func (MockResponder) Respond(_ context.Context, question string) (string, error)
 }
 
 type LiveResponder struct {
-	apiKey     string
-	model      string
-	endpoint   string
-	httpClient *http.Client
+	command string
+	timeout time.Duration
 }
 
-func NewLiveResponder(apiKey, model, endpoint string, httpClient *http.Client) *LiveResponder {
-	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 15 * time.Second}
-	}
+func NewLiveResponder(command string, timeout time.Duration) *LiveResponder {
 	return &LiveResponder{
-		apiKey:     apiKey,
-		model:      model,
-		endpoint:   endpoint,
-		httpClient: httpClient,
+		command: strings.TrimSpace(command),
+		timeout: timeout,
 	}
 }
 
 func (r *LiveResponder) Respond(ctx context.Context, question string) (string, error) {
-	if strings.TrimSpace(r.apiKey) == "" {
-		return "", errors.New("missing API key")
-	}
-	if strings.TrimSpace(r.model) == "" {
-		return "", errors.New("missing model")
-	}
-	endpoint := r.endpoint
-	if endpoint == "" {
-		endpoint = "https://api.openai.com/v1/chat/completions"
-	}
-
-	payload, err := json.Marshal(map[string]any{
-		"model": r.model,
-		"messages": []map[string]string{
-			{"role": "system", "content": chatSystemPrompt},
-			{"role": "user", "content": question},
-		},
-		"temperature": 0.2,
-	})
+	stdout, err := clirunner.Run(ctx, r.command, []byte(chatPrompt(question)), r.timeout)
 	if err != nil {
 		return "", err
 	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return "", err
+	reply := strings.TrimSpace(string(stdout))
+	if reply == "" {
+		return "", errors.New("empty chat response")
 	}
-	req.Header.Set("Authorization", "Bearer "+r.apiKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := r.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("chat request failed: %s", resp.Status)
-	}
-	return parseReply(data)
+	return reply, nil
 }
 
-func parseReply(data []byte) (string, error) {
-	var direct struct {
-		Reply string `json:"reply"`
-	}
-	if err := json.Unmarshal(data, &direct); err == nil && strings.TrimSpace(direct.Reply) != "" {
-		return strings.TrimSpace(direct.Reply), nil
-	}
-
-	var chat struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal(data, &chat); err == nil && len(chat.Choices) > 0 {
-		reply := strings.TrimSpace(chat.Choices[0].Message.Content)
-		if reply != "" {
-			return reply, nil
-		}
-	}
-
-	var response struct {
-		OutputText string `json:"output_text"`
-	}
-	if err := json.Unmarshal(data, &response); err == nil && strings.TrimSpace(response.OutputText) != "" {
-		return strings.TrimSpace(response.OutputText), nil
-	}
-
-	return "", errors.New("invalid chat response")
+func chatPrompt(question string) string {
+	return fmt.Sprintf("%s\n\nUser message:\n%s\n", chatSystemPrompt, strings.TrimSpace(question))
 }
